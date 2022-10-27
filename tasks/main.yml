@@ -1,0 +1,76 @@
+---
+# tasks file for users
+- name: Verifier la connexion avec la machine slave
+  ping:
+- name: Ajouter group "tomcat"
+  group: name=tomcat
+- name: Installation JAVA
+  yum:
+          name: java-11-openjdk-devel
+          state: present
+- name: Ajouter user "tomcat"
+  user: name=tomcat group=tomcat createhome=yes
+  become: true
+
+- name: telecharger tomcat server packages
+  get_url:
+          url: https://dlcdn.apache.org/tomcat/tomcat-10/v10.0.27/bin/apache-tomcat-10.0.27.tar.gz
+          dest: /home/adm1/
+
+- name: Extrer Tomcat archive
+  command: tar -zxvf apache-tomcat-10.0.27.tar.gz -C /opt/tomcat/ creates=/opt/tomcat/apache-tomcat-10.0.27
+
+- name: Changer le dossier d'installation de tomcat
+  file: path=/opt/tomcat/apache-tomcat-10.0.27 owner=tomcat group=tomcat state=directory recurse=yes
+
+- name: copier le fichier service
+  template:
+    src: templates/tomcat.service.j2
+    dest: /etc/systemd/system/tomcat4.service
+
+
+- name: Start and enable firewalld
+  service:
+    name: firewalld
+    state: started
+    enabled: yes
+
+- name: ouvrir firewall de tomcat
+  firewalld:
+    port: "{{ http_port }}/tcp"
+    permanent: true
+    state: enabled
+    immediate: yes
+
+
+
+- name: modifier port
+  template:
+    src: server.xml.j2
+    dest: /opt/tomcat/apache-tomcat-10.0.27/conf/server.xml
+
+- name: Start et enable service4
+  service:
+    name: tomcat4
+    state: started
+    enabled: yes
+
+    #- name: Start service tomcat4
+  #  command: systemctl start tomcat4
+
+
+- name: Autoriser l'accès aux applications Manager et Host Manager à partir de n'importe quelle adresse IP
+  template:
+    src: context.xml.j2
+    dest: "{{ item }}"
+  with_items:
+    - /opt/tomcat/apache-tomcat-10.0.27/webapps/host-manager/META-INF/context.xml
+    - /opt/tomcat/apache-tomcat-10.0.27/webapps/manager/META-INF/context.xml
+
+
+
+- name: cree server manger app et manger host
+  template:
+    src: tomcat-users.xml.j2
+    dest: /opt/tomcat/apache-tomcat-10.0.27/conf/tomcat-users.xml
+  notify: restart tomcait4
